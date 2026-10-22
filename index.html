@@ -519,10 +519,10 @@ var ANIO=2026;
 
 // ── USUARIOS ──
 var USERS={
-  cajero:{pass:'cajero1',role:'cajero',suc:'neptuno',nombre:'Cajero Neptuno'},
-  admin:{pass:'admin123',role:'admin',suc:'neptuno',nombre:'Administrador'},
-  socio:{pass:'socio2026',role:'socio',suc:'neptuno',nombre:'Socio'},
-  propietario:{pass:'dueno123',role:'propietario',suc:'neptuno',nombre:'Propietario'}
+  cajero:{h:'041380bc2e4cad34130e59ff537660a5dc04f6d8c2cfccd97a7c8175b5b735d1',role:'cajero',suc:'neptuno',nombre:'Cajero Neptuno'},
+  admin:{h:'edcc0a12c65bb7db8693dd35c07f938e5029eab35b12e7069178f51b4671ad2f',role:'admin',suc:'neptuno',nombre:'Administrador'},
+  socio:{h:'bb7ae0ae33f478352f92a6fd251d080fd9601bb82d00a80255dd5aa94caa894b',role:'socio',suc:'neptuno',nombre:'Socio'},
+  propietario:{h:'d72982d23e014f98a37a55de490e2747a66d719aaf8b2c0b0dbfb4b6ccac6086',role:'propietario',suc:'neptuno',nombre:'Propietario'}
 };
 
 // ── ESTADO ──
@@ -630,11 +630,24 @@ function doLogin(){
   var errEl=document.getElementById('login-err');
   var btn=document.getElementById('login-btn');
   var u=USERS[uk];
-  if(!u||u.pass!==pw){
-    errEl.style.display='block';
-    document.getElementById('inp-pass').value='';
-    return;
-  }
+  var fallo=function(){errEl.style.display='block';document.getElementById('inp-pass').value='';btn.disabled=false;btn.textContent='Entrar';};
+  if(!u||!pw){fallo();return;}
+  if(!window.crypto||!crypto.subtle){errEl.textContent='Abre la app desde su link https para iniciar sesión';errEl.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Verificando...';
+  hashClave(pw,uk).then(function(h){
+    if(h!==u.h){fallo();return;}
+    entrar(uk,u);
+  }).catch(fallo);
+}
+function hashClave(pw,uk){
+  var enc=new TextEncoder();
+  return crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']).then(function(k){
+    return crypto.subtle.deriveBits({name:'PBKDF2',salt:enc.encode('neptuno-2026:'+uk),iterations:150000,hash:'SHA-256'},k,256);
+  }).then(function(b){return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');});
+}
+function entrar(uk,u){
+  var errEl=document.getElementById('login-err');
+  var btn=document.getElementById('login-btn');
   errEl.style.display='none';
   btn.disabled=true; btn.textContent='Entrando...';
   curUser={key:uk,role:u.role,suc:u.suc,nombre:u.nombre};
