@@ -331,6 +331,7 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
     <div class="kpi-card kv"><div class="kpi-lbl">Venta total</div><div class="kpi-val" id="t-venta">$0</div><div class="kpi-sub" id="t-vsub">del mes</div></div>
     <div class="kpi-card kb"><div class="kpi-lbl">Banco</div><div class="kpi-val" id="t-banco">$0</div><div class="kpi-sub">tarjeta</div></div>
     <div class="kpi-card km"><div class="kpi-lbl">Efectivo</div><div class="kpi-val" id="t-ef">$0</div><div class="kpi-sub">acumulado</div></div>
+    <div class="kpi-card kb"><div class="kpi-lbl">Rappi + Uber</div><div class="kpi-val" id="t-plat">$0</div><div class="kpi-sub" id="t-com">comisión $0</div></div>
     <div class="kpi-card kd"><div class="kpi-lbl">Dólares</div><div class="kpi-val" id="t-dlls">USD $0</div><div class="kpi-sub">acumulado</div></div>
     <div class="kpi-card" style="position:relative;border-color:#f8d0c8;"><div style="height:3px;position:absolute;top:0;left:0;right:0;background:#8B3A2A;border-radius:10px 10px 0 0;"></div><div class="kpi-lbl" style="color:#8B3A2A;">GC mes</div><div class="kpi-val" id="t-gc" style="color:#8B3A2A;">$0</div><div class="kpi-sub">gastos corte</div></div>
   </div>
@@ -340,12 +341,13 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
 
   <!-- PANELS -->
   <div id="p-ventas" class="mpanel active">
+    <div id="com-cfg"></div>
     <div class="stabs" id="stabs-v"></div>
     <div class="sres-grid" id="sres-v"></div>
     <div id="dias-lista"></div>
     <div style="display:none" class="flsep" id="flujo-sec">
       <div class="fltit">Flujo — <span id="fl-sn"></span></div>
-      <div class="tres" id="flujo-tres"></div>
+      <div class="tres" id="flujo-tres" style="grid-template-columns:repeat(2,1fr);"></div>
     </div>
   </div>
 
@@ -386,7 +388,7 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
       </div>
       <div class="tsr-row">
         <label>Categoría</label>
-        <select id="tsr-cat"><option>NÓMINA</option><option>INSUMOS</option><option>LICOR</option><option>RENTAS</option><option>GASTOS GENERALES</option><option>GASTOS CORTE</option><option>SERVICIOS</option><option>IMPUESTOS</option><option>INVERSIONES</option></select>
+        <select id="tsr-cat"><option>NÓMINA</option><option>INSUMOS COCINA</option><option>INSUMOS BARRA</option><option>RENTAS</option><option>GASTOS GENERALES</option><option>GASTOS CORTE</option><option>SERVICIOS</option><option>IMPUESTOS</option><option>INVERSIONES</option></select>
       </div>
       <div class="tsr-row">
         <label>Concepto</label><input type="text" id="tsr-concepto" placeholder="Descripción del pago...">
@@ -513,6 +515,10 @@ var CAL_2026 = {
 var MARZO_CARRUSEL=null;
 
 // ── UTILS ──
+function plat(d){return nv(d.rappi)+nv(d.uber);}
+function comPct(k){return nv(state.cfg&&state.cfg[k]);}
+function comisionDia(d){return nv(d.rappi)*comPct('comRappi')/100+nv(d.uber)*comPct('comUber')/100;}
+function comisionMes(){return (state.dias||[]).reduce(function(a,d){return a+comisionDia(d);},0);}
 function fm(n){return '$'+Math.round(n||0).toLocaleString('es-MX');}
 function fdu(n){return 'USD $'+parseFloat(n||0).toFixed(2);}
 function nv(v){return parseFloat(v)||0;}
@@ -530,7 +536,8 @@ function globalG(){
     });
   });
   var gcMes=(state.dias||[]).reduce(function(a,d){return a+gcTotal(d);},0);
-  return{b:b,e:e,gc:gcMes,t:b+e+gcMes};
+  var com=comisionMes();
+  return{b:b,e:e,gc:gcMes,com:com,t:b+e+gcMes+com};
 }
 
 // ── LOGIN ──
@@ -630,8 +637,8 @@ function blankState(){
   }));
   var cats=[
     {nombre:'NÓMINA',color:'#8E3B46',conceptos:[]},
-    {nombre:'INSUMOS',color:'#185FA5',conceptos:[]},
-    {nombre:'LICOR',color:'#7F77DD',conceptos:[]},
+    {nombre:'INSUMOS COCINA',color:'#185FA5',conceptos:[]},
+    {nombre:'INSUMOS BARRA',color:'#7F77DD',conceptos:[]},
     {nombre:'RENTAS',color:'#854F0B',conceptos:[]},
     {nombre:'GASTOS GENERALES',color:'#993C1D',conceptos:[]},
     {nombre:'GASTOS CORTE',color:'#EF9F27',conceptos:[],esGC:true},
@@ -644,7 +651,7 @@ function blankState(){
     venta:0,
     dias:allDias.map(function(d){
       return{num:d.num,nom:d.nom,fecha:d.fecha,esDom:d.esDom||false,
-             venta:0,efectivo:0,dlls:0,tc:null,tarjeta:0,gc:0,gc_det:{},cxc:0,comentario:'',
+             venta:0,efectivo:0,dlls:0,tc:null,tarjeta:0,rappi:0,uber:0,folioZ:'',corteZ:0,gc:0,gc_det:{},cxc:0,comentario:'',
              esMes:d.esMes!==false};
     }),
     flujo:[],cats:cats,tesoro:[],semanasDesbloqueadas:[]
@@ -843,9 +850,10 @@ function updateTop(){
   var tE=dias.reduce(function(a,d){return a+nv(d.efectivo);},0);
   var tD=dias.reduce(function(a,d){return a+nv(d.dlls);},0);
   var tGC=dias.reduce(function(a,d){return a+gcTotal(d);},0);
+  var tP=dias.reduce(function(a,d){return a+plat(d);},0);
   var set=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
   set('t-venta',fm(vT));set('t-vsub',con+' días capturados');
-  set('t-banco',fm(tB));set('t-ef',fm(tE));set('t-dlls',fdu(tD));set('t-gc',fm(tGC));
+  set('t-banco',fm(tB));set('t-ef',fm(tE));set('t-dlls',fdu(tD));set('t-gc',fm(tGC));set('t-plat',fm(tP));set('t-com','comisión '+fm(comisionMes()));
 }
 
 function showPanel(n){
@@ -882,7 +890,8 @@ function renderV(){
     var tc=nv(d.tc)||16.5;
     var dm=nv(d.dlls)*tc;
     var gc=gcTotal(d);
-    var suma=nv(d.efectivo)+dm+nv(d.tarjeta)+gc+nv(d.cxc);
+    var suma=nv(d.efectivo)+dm+nv(d.tarjeta)+plat(d)+gc+nv(d.cxc);
+    var difZ=nv(d.corteZ)>0?nv(d.venta)-nv(d.corteZ):null;
     var dif=nv(d.venta)-suma;
     var ok=nv(d.venta)>0&&Math.abs(dif)<1;
     var open=openD.has(idx);
@@ -898,6 +907,7 @@ function renderV(){
           '<span style="font-size:13px;font-weight:700;color:'+(nv(d.venta)===0?'#aaa':ok?'#6B1E2E':'#8B3A2A')+'">'+
             (nv(d.venta)===0?'—':fm(nv(d.venta)))+
           '</span>'+
+          (difZ!==null&&Math.abs(difZ)>=1?'<span title="No coincide con Corte Z" style="font-size:10px;font-weight:700;color:#8B3A2A;background:#fbeded;padding:1px 6px;border-radius:10px;">Z</span>':'')+
           (bloq?'<span style="font-size:11px;color:#aaa;">🔒</span>':'')+
           '<span style="font-size:11px;color:#aaa;">'+(open?'▲':'▼')+'</span>'+
         '</div>'+
@@ -908,7 +918,13 @@ function renderV(){
         mkRow('Dólares','dlls',d.dlls,idx,bloq)+
         mkRow('TC','tc',d.tc||tc,idx,bloq)+
         mkRow('Tarjeta','tarjeta',d.tarjeta,idx,bloq)+
+        mkRow('Rappi','rappi',d.rappi,idx,bloq)+
+        mkRow('Uber Eats','uber',d.uber,idx,bloq)+
         mkRow('CXC','cxc',d.cxc,idx,bloq)+
+        '<div class="gc-title" style="color:#6B1E2E;">Corte Z — Soft Restaurant</div>'+
+        mkRowTxt('Folio Z','folioZ',d.folioZ,idx,bloq)+
+        mkRow('Total Corte Z','corteZ',d.corteZ,idx,bloq)+
+        (difZ===null?'':'<div class="drow"><label>Venta vs Z</label><span style="flex:1;text-align:right;font-size:13px;" class="'+(Math.abs(difZ)<1?'diff-ok':'diff-bad')+'">'+(Math.abs(difZ)<1?'✓ Coincide':fm(difZ))+'</span></div>')+
         '<div class="gc-title">Gastos de corte <b style="color:#854F0B;">'+fm(gc)+'</b></div>'+
         GC_CONCEPTOS.map(function(con){
           var gv=((d.gc_det||{})[con])||0;
@@ -940,6 +956,24 @@ function mkRow(lbl,key,val,idx,disabled,sty){
   inp+='style="text-align:right;'+(sty||'')+'">';
   return '<div class="drow"><label>'+lbl+'</label>'+inp+'</div>';
 }
+function mkRowTxt(lbl,key,val,idx,disabled){
+  var inp='<input type="text" value="'+String(val||'').replace(/"/g,'&quot;')+'" placeholder="—" ';
+  inp+='data-idx="'+idx+'" data-key="'+key+'" onchange="setDTxt(this)" ';
+  if(disabled)inp+='disabled ';
+  inp+='style="text-align:right;">';
+  return '<div class="drow"><label>'+lbl+'</label>'+inp+'</div>';
+}
+function setDTxt(el){
+  var i=parseInt(el.dataset.idx);
+  if(!state.dias||!state.dias[i])return;
+  state.dias[i][el.dataset.key]=el.value.trim();
+  saveDebounced();
+}
+function setCom(k,v){
+  if(!state.cfg)state.cfg={};
+  state.cfg[k]=parseFloat(v)||0;
+  saveDebounced();render();
+}
 function setDByData(el){
   var i=parseInt(el.dataset.idx);
   var k=el.dataset.key;
@@ -949,7 +983,7 @@ function setDByData(el){
 function setD(i,k,v){
   if(!state.dias||!state.dias[i])return;
   state.dias[i][k]=parseFloat(v)||0;
-  saveDebounced();renderV();
+  saveDebounced();renderV();updateTop();
 }
 function setGCByData(el){
   var i=parseInt(el.dataset.idx);
@@ -972,7 +1006,17 @@ function setComent(i,v){
 }
 
 // ── SEM RESUMEN ──
+function renderComCfg(){
+  var el=document.getElementById('com-cfg');if(!el)return;
+  if(!curUser||curUser.role==='cajero'){el.innerHTML='';return;}
+  var inp=function(k,lbl){return '<label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#666;">'+lbl+
+    '<input type="number" inputmode="decimal" step="0.1" value="'+(comPct(k)||'')+'" placeholder="0" data-k="'+k+'" onchange="setCom(this.dataset.k,this.value)" style="width:64px;font-size:13px;padding:5px 8px;border:1px solid #ddd;border-radius:8px;text-align:right;background:#fff;color:#1A1416;">%</label>';};
+  el.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:8px 12px;background:#fff;border:1.5px solid #e0e0e0;border-radius:10px;margin-bottom:10px;">'+
+    '<span style="font-size:11px;font-weight:700;color:#6B1E2E;text-transform:uppercase;letter-spacing:.05em;">Comisión plataformas</span>'+
+    inp('comRappi','Rappi')+inp('comUber','Uber Eats')+'</div>';
+}
 function renderSemResumen(){
+  renderComCfg();
   var el=document.getElementById('sres-v');if(!el)return;
   var sems=getSems();
   var dias=state.dias||[];
@@ -982,12 +1026,16 @@ function renderSemResumen(){
   var tS=s.reduce(function(a,i){return a+nv(dias[i]?dias[i].tarjeta:0);},0);
   var dS=s.reduce(function(a,i){return a+nv(dias[i]?dias[i].dlls:0);},0);
   var gS=s.reduce(function(a,i){return dias[i]?a+gcTotal(dias[i]):a;},0);
+  var pS=s.reduce(function(a,i){return dias[i]?a+plat(dias[i]):a;},0);
+  var cS=s.reduce(function(a,i){return dias[i]?a+comisionDia(dias[i]):a;},0);
   var g=globalG();
   el.innerHTML=[
     {c:'sv',l:'Venta Sem '+(sa+1),v:fm(vS)},
     {c:'sm',l:'Efectivo',v:fm(eS)},
     {c:'sa',l:'Banco/Tarjeta',v:fm(tS)},
     {c:'sd',l:'USD',v:fdu(dS)},
+    {c:'sa',l:'Rappi + Uber',v:fm(pS)},
+    {c:'sr',l:'Comisiones plat.',v:fm(cS)},
     {c:'sr',l:'GC semana',v:fm(gS)},
     {c:'srb',l:'Gastos banco (mes)',v:fm(g.b)},
     {c:'sre',l:'Gastos ef. (mes)',v:fm(g.e)}
@@ -1008,12 +1056,14 @@ function renderFlujo(){
   var eS=s.reduce(function(a,i){return a+nv(dias[i]?dias[i].efectivo:0);},0);
   var tS=s.reduce(function(a,i){return a+nv(dias[i]?dias[i].tarjeta:0);},0);
   var dS=s.reduce(function(a,i){return a+nv(dias[i]?dias[i].dlls:0);},0);
+  var pS=s.reduce(function(a,i){return dias[i]?a+plat(dias[i])-comisionDia(dias[i]):a;},0);
   var tc=nv(state.cfg?state.cfg.tc:16.5)||16.5;
   if(snEl)snEl.textContent='Semana '+(sa+1);
   el.innerHTML=[
     {l:'Banco',v:fm(tS),c:'#1756A0'},
     {l:'Efectivo',v:fm(eS),c:'#8C5A3C'},
-    {l:'USD',v:fdu(dS),c:'#A8843F'}
+    {l:'USD',v:fdu(dS),c:'#A8843F'},
+    {l:'Plataformas neto',v:fm(pS),c:'#4A1420'}
   ].map(function(x){
     return '<div class="tc"><div class="tcl">'+x.l+'</div><div class="tcv" style="color:'+x.c+';">'+x.v+'</div></div>';
   }).join('');
@@ -1111,7 +1161,7 @@ function renderBase(){
 
   // ── CATEGORY LIST ──
   var CAT_ORDER=[
-    {nom:'NÓMINA',color:'#8E3B46'},{nom:'INSUMOS',color:'#185FA5'},{nom:'LICOR',color:'#7F77DD'},
+    {nom:'NÓMINA',color:'#8E3B46'},{nom:'INSUMOS COCINA',color:'#185FA5'},{nom:'INSUMOS BARRA',color:'#7F77DD'},
     {nom:'RENTAS',color:'#854F0B'},{nom:'GASTOS GENERALES',color:'#993C1D'},
     {nom:'GASTOS CORTE',color:'#EF9F27',esGC:true},{nom:'SERVICIOS',color:'#636363'},
     {nom:'IMPUESTOS',color:'#4A4A4A'},{nom:'INVERSIONES',color:'#4A1420'}
@@ -1261,6 +1311,7 @@ function renderDist(){
       '<span style="font-size:11px;font-weight:700;color:#888;min-width:90px;text-align:right;">MONTO</span></div></div>'+
     row('VENTA TOTAL',vT,true,'#6B1E2E')+
     row('GASTOS',totalGastos,false,'#8B3A2A')+
+    (g.com>0?row('&nbsp;&nbsp;incluye comisiones plataformas',g.com,false,'#8B3A2A'):'')+
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:'+(util>=0?'#F6ECEE':'#fbeded')+';border-radius:8px;margin-top:4px;">'+
       '<span style="font-size:14px;font-weight:800;">UTILIDAD</span>'+
       '<div style="display:flex;gap:16px;align-items:center;">'+
@@ -1542,8 +1593,8 @@ function exportarExcel(){
   if(!curUser||curUser.role!=='propietario')return;
   var suc=SUCURSALES.find(function(s){return s.key===curSuc;})||{nom:curSuc};
   function toCSV(rows){return rows.map(function(r){return r.map(function(c){var s=String(c==null?'':c);if(s.indexOf(',')>=0||s.indexOf('"')>=0)s='"'+s.replace(/"/g,'""')+'"';return s;}).join(',');}).join('\n');}
-  var rows=[['Ventas '+suc.nom+' '+MESES[curMes]+' '+ANIO],[],['Dia','Nombre','Venta','Efectivo','Dolares','TC','Tarjeta','GC','CXC','Comentario']];
-  (state.dias||[]).forEach(function(d){rows.push([d.num,d.nom,d.venta||0,d.efectivo||0,d.dlls||0,d.tc||16.5,d.tarjeta||0,gcTotal(d),d.cxc||0,d.comentario||'']);});
+  var rows=[['Ventas '+suc.nom+' '+MESES[curMes]+' '+ANIO],[],['Dia','Nombre','Venta','Efectivo','Dolares','TC','Tarjeta','Rappi','Uber Eats','GC','CXC','Folio Z','Corte Z','Comentario']];
+  (state.dias||[]).forEach(function(d){rows.push([d.num,d.nom,d.venta||0,d.efectivo||0,d.dlls||0,d.tc||16.5,d.tarjeta||0,d.rappi||0,d.uber||0,gcTotal(d),d.cxc||0,d.folioZ||'',d.corteZ||0,d.comentario||'']);});
   var csv='\uFEFF'+toCSV(rows);
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
@@ -1692,10 +1743,10 @@ function renderStats(){
       return s.reduce(function(a,i){return a+nv(dias[i]?dias[i].gc:0);},0);
     });
 
-    var CAT_COLORS={'NOMINA':'#8E3B46','INSUMOS':'#185FA5','LICOR':'#7F77DD','RENTAS':'#854F0B',
+    var CAT_COLORS={'NOMINA':'#8E3B46','INSUMOS COCINA':'#185FA5','INSUMOS BARRA':'#7F77DD','RENTAS':'#854F0B',
       'GASTOS GENERALES':'#993C1D','GASTOS CORTE':'#EF9F27','SERVICIOS':'#636363',
       'IMPUESTOS':'#4A4A4A','INVERSIONES':'#4A1420'};
-    var CAT_NAMES=['NÓMINA','INSUMOS','LICOR','RENTAS','GASTOS GENERALES','GASTOS CORTE','SERVICIOS','IMPUESTOS','INVERSIONES'];
+    var CAT_NAMES=['NÓMINA','INSUMOS COCINA','INSUMOS BARRA','RENTAS','GASTOS GENERALES','GASTOS CORTE','SERVICIOS','IMPUESTOS','INVERSIONES'];
     var vT=dias.reduce(function(a,d){return a+nv(d.venta);},0);
 
     out+='<div class="rcard" style="margin-bottom:8px;"><div class="slbl">Gastos por semana</div>'+
