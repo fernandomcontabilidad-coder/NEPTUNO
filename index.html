@@ -245,6 +245,13 @@ body.modo-oscuro [style*="background:#faf3e0"]{background:#2a1f00!important;}
 body.modo-oscuro [style*="background:#eef3fb"]{background:#0a1a2e!important;}
 
 /* ── NEPTUNO ── */
+/* socio: solo lectura */
+body.ro .tsr-form,body.ro .cp-form,body.ro .gcadd,body.ro .mov-del,body.ro .cp-del,body.ro .pv-del,
+body.ro .tsr-btn,body.ro .btn-sm,body.ro .btn-ghost,body.ro .export-btn,body.ro #tr-msg,body.ro #cp-msg,
+body.ro .rcard:has(#si-ef),body.ro .rcard:has(#cp-monto),body.ro [onclick*="toggleCierre"]{display:none!important;}
+body.ro .ro-badge{display:inline-flex!important;}
+.ro-badge{display:none;white-space:nowrap;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:#D9BE8A;color:#1A1416;letter-spacing:.04em;}
+
 [hidden]{display:none!important;}
 .cp-tabs,.cat-tabs{display:flex;gap:5px;overflow-x:auto;margin-bottom:10px;}
 .cp-item{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:.5px solid #eee;}
@@ -326,6 +333,7 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
     <div class="tbl">
       <button class="ham" onclick="sbOpen()">☰</button>
       <span class="app-title">NEPTUNO</span>
+      <span class="ro-badge">SOLO LECTURA</span>
       <span class="suc-badge" id="suc-badge"></span>
     </div>
     <div class="tbr">
@@ -495,12 +503,14 @@ var SUCURSALES=[
 var ROLES={
   cajero:{label:'Cajero',tabs:['ventas'],av:'uav-c',ini:'CJ'},
   admin:{label:'Administrador',tabs:['ventas','base','tesoro'],av:'uav-a',ini:'AD'},
+  socio:{label:'Socio',tabs:['ventas','tesoro','comprob','base','stats','proyeccion','anio'],av:'uav-a',ini:'SO'},
   propietario:{label:'Propietario',tabs:['ventas','base','dist','stats','anio','tesoro','proyeccion','usuarios'],av:'uav-p',ini:'PR'}
 };
 var TLBLS={ventas:'Ventas',base:'Base',dist:'Distribución',stats:'Estadísticas',anio:'📊 Año',tesoro:'Tesorería',proyeccion:'📈 Proyección',auditoria:'Auditoría',usuarios:'Usuarios'};
 var SB_MENU={
   cajero:[{s:'NAVEGACIÓN'},{id:'ventas',ic:'📊',n:'Ventas'}],
   admin:[{s:'NAVEGACIÓN'},{id:'ventas',ic:'📊',n:'Ventas'},{id:'tesoro',ic:'🏦',n:'Tesorería'},{id:'comprob',ic:'🧾',n:'Comprobación'},{id:'base',ic:'📋',n:'Base'},{s:'CONFIGURACIÓN'},{id:'catalogo',ic:'🗂️',n:'Categorías y proveedores'}],
+  socio:[{s:'CONSULTA'},{id:'ventas',ic:'📊',n:'Ventas'},{id:'tesoro',ic:'🏦',n:'Tesorería'},{id:'comprob',ic:'🧾',n:'Comprobación'},{id:'base',ic:'📋',n:'Base'},{id:'stats',ic:'📈',n:'Estadísticas'},{id:'proyeccion',ic:'🔭',n:'Proyección'},{id:'anio',ic:'🗓',n:'Año'}],
   propietario:[{s:'NAVEGACIÓN'},{id:'ventas',ic:'📊',n:'Ventas'},{id:'tesoro',ic:'🏦',n:'Tesorería'},{id:'comprob',ic:'🧾',n:'Comprobación'},{id:'base',ic:'📋',n:'Base'},{id:'dist',ic:'⚖️',n:'Distribución'},{id:'stats',ic:'📈',n:'Estadísticas'},{id:'proyeccion',ic:'🔭',n:'Proyección'},{id:'anio',ic:'🗓',n:'Año'},{s:'CONFIGURACIÓN'},{id:'catalogo',ic:'🗂️',n:'Categorías y proveedores'},{id:'config',ic:'⚙️',n:'Configuración'},{s:'ADMIN'},{id:'usuarios',ic:'👥',n:'Usuarios'}]
 };
 var GC_CONCEPTOS=['Soriana','Farmacia','Smart','DJ','Cerveza','Policía','Dulfi','Propinas'];
@@ -511,6 +521,7 @@ var ANIO=2026;
 var USERS={
   cajero:{pass:'cajero1',role:'cajero',suc:'neptuno',nombre:'Cajero Neptuno'},
   admin:{pass:'admin123',role:'admin',suc:'neptuno',nombre:'Administrador'},
+  socio:{pass:'socio2026',role:'socio',suc:'neptuno',nombre:'Socio'},
   propietario:{pass:'dueno123',role:'propietario',suc:'neptuno',nombre:'Propietario'}
 };
 
@@ -565,6 +576,7 @@ function cargarCatalogo(cb){
   setTimeout(fin,4000);
 }
 function guardarCatalogo(){
+  if(esSocio())return;
   if(_catTimer)clearTimeout(_catTimer);
   _catTimer=setTimeout(function(){
     db.collection('config').doc('catalogo_neptuno').set({data:JSON.stringify(catalogo),ts:Date.now()})
@@ -631,6 +643,7 @@ function doLogin(){
   document.getElementById('LOGIN').style.display='none';
   document.getElementById('APP').style.display='flex';
   btn.disabled=false; btn.textContent='Entrar';
+  document.body.classList.toggle('ro',u.role==='socio');
   setupUI();
   renderMesBar();
   cargarConfigSems(function(){cargarCatalogo(function(){cargarSaldos(function(){loadData();});});});
@@ -638,6 +651,7 @@ function doLogin(){
 }
 
 function doLogout(){
+  document.body.classList.remove('ro');
   if(unsub)unsub();
   curUser=null; state={};
   document.getElementById('APP').style.display='none';
@@ -846,7 +860,9 @@ function afterLoad(){
   setTimeout(function(){showSync('hidden','');},800);
 }
 
+function esSocio(){return !!(curUser&&curUser.role==='socio');}
 function saveData(){
+  if(esSocio())return;
   // Never save blank months - only save if there are real ventas or tesoro entries
   var hasVentas=(state.dias||[]).some(function(d){return nv(d.venta)>0;});
   var hasTesoro=(state.tesoro||[]).length>0;
@@ -981,7 +997,7 @@ function renderV(){
   if(!dlEl)return;
   var semIdxs=sems[sa]||[];
   if(!semIdxs.length){dlEl.innerHTML='<p style="text-align:center;color:#aaa;padding:2rem;">Sin días</p>';return;}
-  var bloq=isSemBloqueada(sa);
+  var bloq=isSemBloqueada(sa)||esSocio();
   dlEl.innerHTML=semIdxs.map(function(idx){
     var d=dias[idx];if(!d)return'';
     var tc=nv(d.tc)||16.5;
@@ -1757,6 +1773,7 @@ function sbInit(){
   }).join('');
 }
 function sbNav(n){
+  if(curUser){var _mn=(SB_MENU[curUser.role]||[]).map(function(i){return i.id;});if(_mn.indexOf(n)<0)return;}
   sbClose();showPanel(n);
   if(n==='ventas')renderV();
   if(n==='base')renderBase();
@@ -1965,8 +1982,8 @@ function renderUsuarios(){
     var suc=u.suc?SUCURSALES.find(function(s){return s.key===u.suc;}):null;
     var cls=u.role==='propietario'?'uav-p':u.role==='admin'?'uav-a':'uav-c';
     var ini=u.role==='propietario'?'PR':u.role==='admin'?'AD':'CJ';
-    var rbg=u.role==='propietario'?'#6B1E2E':u.role==='admin'?'#185FA5':'#7F77DD';
-    var rlbl=u.role==='propietario'?'Propietario':u.role==='admin'?'Admin':'Cajero';
+    var rbg=u.role==='propietario'?'#6B1E2E':u.role==='admin'?'#185FA5':u.role==='socio'?'#A8843F':'#7F77DD';
+    var rlbl=ROLES[u.role]?ROLES[u.role].label:u.role;
     return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:.5px solid #f0f0f0;">'+
       '<div class="uav '+cls+'" style="flex-shrink:0;">'+ini+'</div>'+
       '<div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+u.nombre+'</div>'+
@@ -2216,6 +2233,7 @@ function cargarSaldos(cb){
   setTimeout(fin,4000);
 }
 function guardarSaldo(key,obj){
+  if(esSocio())return Promise.reject({code:'solo_lectura'});
   return db.collection('config').doc('saldos_neptuno').get().then(function(snap){
     var d={};if(snap.exists&&snap.data()&&snap.data().data){try{d=JSON.parse(snap.data().data)||{};}catch(e){}}
     d[key]=obj;saldosIni=d;
@@ -2529,6 +2547,7 @@ function limpiarConfigSems(){
 }
 
 function guardarConfigSems(){
+  if(esSocio())return;
   var key=mesKey(curMes,ANIO);
   var ranges=configSems[key]||[];
   // getSems now reads configSems directly - just re-render
@@ -2581,6 +2600,21 @@ function aplicarConfigSems(){
     d.esDom=finDates[d.fecha]===true;
   });
 }
+
+
+// ── Modo solo lectura (socio) ──
+(function(){
+  function bloquear(root){
+    if(!document.body.classList.contains('ro'))return;
+    (root.querySelectorAll?root:document).querySelectorAll('#APP input, #APP textarea, #APP select').forEach(function(el){
+      if(el.closest('.flt-bar')||el.closest('#tsr-mov-flt'))return;
+      el.disabled=true;
+    });
+  }
+  var mo=new MutationObserver(function(){bloquear(document);});
+  document.addEventListener('DOMContentLoaded',function(){mo.observe(document.body,{childList:true,subtree:true});});
+  if(document.readyState!=='loading')mo.observe(document.body,{childList:true,subtree:true});
+})();
 
 // ── START ──
 (function(){
