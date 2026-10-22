@@ -1,5 +1,5 @@
 // Neptuno — service worker: guarda la app para abrir rápido; los datos siempre vienen de Firebase
-var CACHE='neptuno-v5';
+var CACHE='neptuno-v6';
 var SHELL=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png'];
 self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(SHELL);}));self.skipWaiting();});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(n){return n!==CACHE;}).map(function(n){return caches.delete(n);}));}));self.clients.claim();});

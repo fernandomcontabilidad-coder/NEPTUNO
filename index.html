@@ -427,17 +427,14 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
       <div class="tsr-msg" id="tsr-msg"></div>
     </div>
     <div class="rcard">
-      <div class="slbl">Gastos por unidad</div>
-      <div class="ug-grid" id="tsr-resumen"></div>
-    </div>
-    <div class="rcard">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span class="slbl" style="margin:0;">Movimientos</span>
+        <span class="slbl" style="margin:0;">Pagos registrados</span>
         <span id="tsr-total-lbl" style="font-size:13px;font-weight:700;color:#8B3A2A;"></span>
       </div>
+      <div id="tsr-mov-flt"></div>
       <div id="tsr-movs"><p style="text-align:center;color:#aaa;padding:1.5rem;font-size:13px;">Sin movimientos</p></div>
     </div>
-    <div class="rcard">
+    <div class="rcard" hidden>
       <div class="slbl">Estado de cuenta — banco</div>
       <p style="font-size:11px;color:#888;margin-bottom:10px;">Todos los pagos registrados desde el banco de Neptuno, en orden de fecha.</p>
       <div class="flt-bar" id="edo-tabs" style="display:none"></div>
@@ -1605,70 +1602,64 @@ function addMovTesoro(){
 }
 
 function delMovTesoro(id){
-  if(window._delPend!==id){window._delPend=id;showTsrMsg('Toca 🗑 otra vez para eliminar','err');setTimeout(function(){if(window._delPend===id)window._delPend=null;},3000);return;}
+  if(window._delPend!==id){window._delPend=id;renderTesoro();showTsrMsg('Toca 🗑 otra vez para eliminar','err');setTimeout(function(){if(window._delPend===id){window._delPend=null;try{renderTesoro();}catch(e){}}},3000);return;}
   window._delPend=null;
   state.tesoro=(state.tesoro||[]).filter(function(m){return m.id!==id;});
   saveDebounced();renderTesoro();
 }
 
 function renderTesoro(){
-  var todos=state.tesoro||[];
+  var todos=tesoroMes();
+  var sems=getSems(),dias=state.dias||[];
+  var fs=window._tsrSem===undefined?-1:window._tsrSem,ff=window._tsrForma||'todo',fc=window._tsrCat||'';
   var movs=todos.filter(function(m){
-    if(tsrFiltro==='propio')return m.banco===m.unidad;
-    if(tsrFiltro==='cruzado')return m.banco!==m.unidad;
+    if(fs!==-1&&(m.sem||0)!==fs)return false;
+    if(ff==='banco'&&m.forma!=='banco')return false;
+    if(ff==='efectivo'&&m.forma==='banco')return false;
+    if(fc&&m.cat!==fc)return false;
     return true;
   });
-  // Resumen por unidad
-  var resEl=document.getElementById('tsr-resumen');
-  if(resEl){
-    resEl.innerHTML=SUCURSALES.map(function(s){
-      var propio=todos.filter(function(m){return m.unidad===s.key&&m.banco===s.key;}).reduce(function(a,m){return a+nv(m.monto);},0);
-      var cruzado=todos.filter(function(m){return m.unidad===s.key&&m.banco!==s.key;}).reduce(function(a,m){return a+nv(m.monto);},0);
-      var tot=propio+cruzado;
-      var n=todos.filter(function(m){return m.unidad===s.key;}).length;
-      return '<div class="ug-card"><div class="ug-icon">'+s.icon+'</div><div class="ug-nom">'+s.nom+'</div>'+
-        '<div class="ug-tot">'+(tot>0?fm(tot):'—')+'</div>'+
-        '<div class="ug-n">'+n+' movs</div>'+
-        (cruzado>0?'<div style="font-size:9px;color:#854F0B;font-weight:700;margin-top:2px;">🔄 '+fm(cruzado)+'</div>':'')+
-      '</div>';
-    }).join('');
+  var fltEl=document.getElementById('tsr-mov-flt');
+  if(fltEl){
+    var b=function(on,txt,js){return '<button class="flt-btn'+(on?' on':'')+'" onclick="'+js+'">'+txt+'</button>';};
+    var cats={};todos.forEach(function(m){if(m.cat)cats[m.cat]=1;});
+    fltEl.innerHTML='<div class="flt-bar" style="margin-bottom:6px;">'+b(fs===-1,'Mes','_tsrSem=-1;renderTesoro()')+
+      sems.map(function(s,i){return b(fs===i,'S'+(i+1),'_tsrSem='+i+';renderTesoro()');}).join('')+'</div>'+
+      '<div class="flt-bar" style="margin-bottom:6px;">'+b(ff==='todo','Todos','_tsrForma=\'todo\';renderTesoro()')+b(ff==='banco','🏦 Banco','_tsrForma=\'banco\';renderTesoro()')+b(ff==='efectivo','💵 Efectivo','_tsrForma=\'efectivo\';renderTesoro()')+
+      '<select onchange="_tsrCat=this.value;renderTesoro()" style="font-size:11px;font-weight:600;padding:4px 8px;border:1.5px solid #ddd;border-radius:20px;background:#fff;color:#666;max-width:170px;"><option value="">Todas las categorías</option>'+
+      Object.keys(cats).sort().map(function(c){return '<option'+(c===fc?' selected':'')+'>'+esc(c)+'</option>';}).join('')+'</select></div>';
   }
-  // Total
   var tot2=movs.reduce(function(a,m){return a+nv(m.monto);},0);
   var totEl=document.getElementById('tsr-total-lbl');
-  if(totEl)totEl.textContent=movs.length?'Total: '+fm(tot2):'';
-  // Movimientos agrupados por unidad
-  var movEl=document.getElementById('tsr-movs');if(!movEl)return;
-  if(!movs.length){
-    movEl.innerHTML='<p style="text-align:center;color:#aaa;padding:1.5rem;font-size:13px;">'+(tsrFiltro==='cruzado'?'No hay pagos cruzados':'Sin movimientos')+'</p>';
-    renderEdoCuenta();return;
+  if(totEl)totEl.textContent=movs.length?movs.length+' · '+fm(tot2):'';
+  var movEl=document.getElementById('tsr-movs');
+  if(movEl){
+    if(!movs.length){movEl.innerHTML='<p style="text-align:center;color:#aaa;padding:1.5rem;font-size:13px;">Sin pagos con este filtro</p>';}
+    else{
+      var out='';
+      sems.forEach(function(s,si){
+        var gm=movs.filter(function(m){return(m.sem||0)===si;});if(!gm.length)return;
+        var d1=dias[s[0]]?dias[s[0]].num:'?',d2=dias[s[s.length-1]]?dias[s[s.length-1]].num:'?';
+        var gtot=gm.reduce(function(a,m){return a+nv(m.monto);},0);
+        out+='<div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;padding:8px 0 4px;display:flex;justify-content:space-between;border-bottom:1px solid #e0e0e0;margin-bottom:6px;">'+
+          '<span>Semana '+(si+1)+' <span style="font-weight:400;color:#aaa;">('+d1+'-'+d2+')</span></span><span style="color:#8B3A2A;">'+fm(gtot)+'</span></div>';
+        gm.slice().sort(function(a,b){return nv(b.monto)-nv(a.monto);}).forEach(function(m){
+          var isB=m.forma==='banco';
+          var fcx=m.fecha?m.fecha.slice(5).split('-').reverse().join('/'):'—';
+          out+='<div class="mov-card">'+
+            '<div class="mov-icon" style="background:'+(isB?'#eef3fb':'#F6ECEE')+';">'+(isB?'🏦':nv(m.montoDlls)>0?'💲':'💵')+'</div>'+
+            '<div class="mov-info"><div class="mov-con">'+esc(m.concepto||m.prov||'')+'</div>'+
+              '<div class="mov-det"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+catColor(m.cat)+';margin-right:4px;"></span>'+esc(m.cat)+' · '+fcx+'</div></div>'+
+            '<div style="text-align:right;flex-shrink:0;"><div class="mov-monto">'+fm(m.monto)+'</div><div style="font-size:10px;color:#aaa;">'+(isB?'banco':nv(m.montoDlls)>0?'USD '+nv(m.montoDlls).toFixed(2):'efectivo')+'</div></div>'+
+            '<button class="mov-del" onclick="delMovTesoro('+m.id+')">'+(window._delPend===m.id?'🗑':'✕')+'</button>'+
+          '</div>';
+        });
+      });
+      movEl.innerHTML=out;
+    }
   }
-  var grupos={};SUCURSALES.forEach(function(s){grupos[s.key]=[];});
-  movs.forEach(function(m){if(grupos[m.unidad])grupos[m.unidad].push(m);});
-  var out='';
-  SUCURSALES.forEach(function(s){
-    var gm=grupos[s.key];if(!gm.length)return;
-    var gtot=gm.reduce(function(a,m){return a+nv(m.monto);},0);
-    out+='<div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;padding:8px 0 4px;display:flex;justify-content:space-between;border-bottom:1px solid #e0e0e0;margin-bottom:6px;">'+
-      '<span>'+s.icon+' '+s.nom+'</span><span style="color:#8B3A2A;">'+fm(gtot)+'</span></div>';
-    gm.slice().reverse().forEach(function(m){
-      var banco=SUCURSALES.find(function(sb){return sb.key===m.banco;})||{icon:'🏦',nom:m.banco,badge:'#eee',badgeTx:'#333'};
-      var isC=m.banco!==m.unidad;
-      var fc=m.fecha?m.fecha.slice(5).replace('-','/'):'—';
-      out+='<div class="mov-card">'+
-        '<div class="mov-icon" style="background:'+(isC?'#faf0dc':'#F6ECEE')+';">'+banco.icon+'</div>'+
-        '<div class="mov-info"><div class="mov-con">'+m.concepto+'</div>'+
-          '<div class="mov-det"><b>'+fc+'</b> · '+m.cat+(isC?' · <span style="color:#854F0B;font-weight:700;">🔄 '+banco.nom+'</span>':'')+'</div></div>'+
-        '<div style="text-align:right;flex-shrink:0;"><div class="mov-monto">'+fm(m.monto)+'</div><div style="font-size:10px;color:#aaa;">'+m.forma+'</div></div>'+
-        '<button class="mov-del" onclick="delMovTesoro('+m.id+')">✕</button>'+
-      '</div>';
-    });
-    out+='<div style="margin-bottom:10px;"></div>';
-  });
-  movEl.innerHTML=out;
   renderTsrSaldo();
   renderFlujSemanal();
-  renderEdoCuenta();
 }
 
 function initEdoCuenta(){
