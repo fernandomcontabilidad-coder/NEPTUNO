@@ -389,6 +389,7 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
 
   <div id="p-tesoro" class="mpanel">
     <div id="tsr-saldo-grid" style="margin-bottom:12px;"></div>
+    <div id="tsr-traspasos" class="rcard"></div>
     <div class="flt-bar" style="display:none">
       <button class="flt-btn on" onclick="setFltTsr('todo',this)">Todos</button>
       <button class="flt-btn" onclick="setFltTsr('propio',this)">Banco propio</button>
@@ -635,7 +636,7 @@ function doLogin(){
   btn.disabled=false; btn.textContent='Entrar';
   setupUI();
   renderMesBar();
-  cargarConfigSems(function(){cargarCatalogo(function(){loadData();});});
+  cargarConfigSems(function(){cargarCatalogo(function(){cargarSaldos(function(){loadData();});});});
   initModo();
 }
 
@@ -729,7 +730,7 @@ function blankState(){
              venta:0,efectivo:0,dlls:0,tc:null,tarjeta:0,rappi:0,uber:0,folioZ:'',corteZ:0,gc:0,gc_det:{},cxc:0,comentario:'',
              esMes:d.esMes!==false};
     }),
-    flujo:[],cats:cats,tesoro:[],comprob:[],semanasDesbloqueadas:[]
+    flujo:[],cats:cats,tesoro:[],comprob:[],traspasos:[],semanasDesbloqueadas:[]
   };
 }
 
@@ -801,6 +802,7 @@ function loadData(){
     }
     afterLoad();
     if(!(state.dias||[]).some(function(d){return nv(d.venta)>0;}))cargarPrecarga();
+    else actualizarPrecarga();
   },function(){
     state=getInitialState();
     afterLoad();
@@ -817,6 +819,16 @@ function cargarPrecarga(){
     if(!d||docId()!==id||!d.cfg||d.cfg.suc!==curSuc||d.cfg.mesNom!==MESES[curMes])return;
     if((state.dias||[]).some(function(x){return nv(x.venta)>0;}))return;
     state=d;afterLoad();saveData();
+  }).catch(function(){});
+}
+var _precargaAct={};
+function actualizarPrecarga(){
+  var id=docId();if(_precargaAct[id]||PRECARGAS.indexOf(id)<0||nv(state.precargaV)>=2)return;_precargaAct[id]=true;
+  fetch('datos/'+id+'.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(!d||docId()!==id||nv(state.precargaV)>=2)return;
+    if(!(state.traspasos||[]).length&&d.traspasos)state.traspasos=d.traspasos;
+    state.precargaV=d.precargaV||2;saveData();
+    try{render();var p=document.querySelector('.mpanel.active');if(p&&p.id==='p-tesoro')initTesoro();}catch(e){}
   }).catch(function(){});
 }
 function getInitialState(){
@@ -1494,6 +1506,7 @@ function provElegido(selId,newId,cat){
 }
 function initTesoro(){
   renderTsrCats();
+  try{renderTraspasos();}catch(e){}
   var lbl=document.getElementById('tsr-mes-lbl');
   if(lbl)lbl.textContent=MESES[curMes]+' '+ANIO;
   var fEl=document.getElementById('tsr-fecha');
@@ -2018,93 +2031,8 @@ function getGCPorSemana(){
 }
 
 
-function renderTsrSaldo(){
-  var el=document.getElementById('tsr-saldo-grid');if(!el)return;
-  var dias=state.dias||[];
-  // Only use tesoro if it belongs to current month
-  var stateMes=state.cfg&&state.cfg.mesNom;
-  var tesoro=(!stateMes||stateMes===MESES[curMes])?state.tesoro||[]:[];
-  var tc=nv(state.cfg&&state.cfg.tc)||16.5;
-  var tTar=dias.reduce(function(a,d){return a+nv(d.tarjeta);},0);
-  var tEf=dias.reduce(function(a,d){return a+nv(d.efectivo);},0);
-  var tDlls=dias.reduce(function(a,d){return a+nv(d.dlls);},0);
-  var gB=tesoro.filter(function(m){return m.forma==='banco';}).reduce(function(a,m){return a+nv(m.monto);},0);
-  var gE=tesoro.filter(function(m){return m.forma==='efectivo'&&!nv(m.montoDlls);}).reduce(function(a,m){return a+nv(m.monto);},0);
-  var gDlls=tesoro.filter(function(m){return nv(m.montoDlls)>0;}).reduce(function(a,m){return a+nv(m.montoDlls);},0);
-  var gDllsPesos=tesoro.filter(function(m){return nv(m.montoDlls)>0;}).reduce(function(a,m){return a+nv(m.monto);},0);
-  var sEf=tEf-gE-gDllsPesos;var sDlls=tDlls-gDlls;
-  el.innerHTML=
-    '<div style="background:#F6ECEE;border-radius:10px;padding:10px 12px;margin-bottom:8px;">'+
-      '<div style="font-size:11px;font-weight:700;color:#6B1E2E;margin-bottom:6px;">💵 EFECTIVO MXN</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">'+
-        '<div><div style="font-size:10px;color:#888;">Cobrado</div><div style="font-size:13px;font-weight:800;color:#6B1E2E;">'+fm(tEf)+'</div></div>'+
-        '<div><div style="font-size:10px;color:#888;">Pagado</div><div style="font-size:13px;font-weight:700;color:#8B3A2A;">-'+fm(gE+gDllsPesos)+'</div></div>'+
-        '<div><div style="font-size:10px;color:#888;">Disponible</div><div style="font-size:13px;font-weight:800;color:'+(sEf>=0?'#6B1E2E':'#8B3A2A')+';">'+fm(sEf)+'</div></div>'+
-      '</div></div>'+
-    '<div style="background:#faf3e0;border-radius:10px;padding:10px 12px;margin-bottom:8px;">'+
-      '<div style="font-size:11px;font-weight:700;color:#A8843F;margin-bottom:6px;">💲 DÓLARES USD &nbsp;<span style="font-weight:400;color:#aaa;font-size:10px;">TC: $'+tc+'</span></div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">'+
-        '<div><div style="font-size:10px;color:#888;">Cobrado</div><div style="font-size:13px;font-weight:800;color:#A8843F;">USD '+tDlls.toFixed(2)+'</div></div>'+
-        '<div><div style="font-size:10px;color:#888;">Pagado</div><div style="font-size:13px;font-weight:700;color:#8B3A2A;">-USD '+gDlls.toFixed(2)+'</div></div>'+
-        '<div><div style="font-size:10px;color:#888;">Disponible</div><div style="font-size:13px;font-weight:800;color:'+(sDlls>=0?'#A8843F':'#8B3A2A')+';">USD '+sDlls.toFixed(2)+'</div></div>'+
-      '</div></div>'+
-    '<div style="background:#eef3fb;border-radius:10px;padding:10px 12px;">'+
-      '<div style="font-size:11px;font-weight:700;color:#185FA5;margin-bottom:6px;">🏦 BANCO/TARJETA</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'+
-        '<div><div style="font-size:10px;color:#888;">Cobrado</div><div style="font-size:13px;font-weight:800;color:#185FA5;">'+fm(tTar)+'</div></div>'+
-        '<div><div style="font-size:10px;color:#888;">Pagado</div><div style="font-size:13px;font-weight:700;color:#8B3A2A;">-'+fm(gB+fondosMes())+'</div>'+(fondosMes()>0?'<div style="font-size:10px;color:#888;">incluye fondos de compras '+fm(fondosMes())+'</div>':'')+'</div>'+
-      '</div><div style="font-size:10px;color:#888;margin-top:4px;">Ver estado de cuenta para detalle</div>'+
-    '</div>';
-}
 
 
-function renderFlujSemanal(){
-  var el=document.getElementById('tsr-flujo-sem');if(!el)return;
-  var sems=getSems();var dias=state.dias||[];
-  // Only show tesoro entries that are for current month
-  var mesNom=MESES[curMes];
-  var allTesoro=state.tesoro||[];
-  // If state has cfg.mesNom, only use tesoro if it matches current month
-  var stateMes=state.cfg&&state.cfg.mesNom;
-  var tesoro=(!stateMes||stateMes===mesNom)?allTesoro:[];
-  var tc=nv(state.cfg&&state.cfg.tc)||16.5;
-  if(!sems.length){el.innerHTML='';return;}
-  var out='<div style="font-size:13px;font-weight:800;margin-bottom:10px;color:#444;">📊 Flujo por semana</div>';
-  sems.forEach(function(sem,si){
-    var efEnt=sem.reduce(function(a,i){return a+nv(dias[i]?dias[i].efectivo:0);},0);
-    var dllsEnt=sem.reduce(function(a,i){return a+nv(dias[i]?dias[i].dlls:0);},0);
-    var pagosEf=tesoro.filter(function(m){return(m.sem||0)===si&&m.forma==='efectivo'&&!nv(m.montoDlls);});
-    var pagosDlls=tesoro.filter(function(m){return(m.sem||0)===si&&nv(m.montoDlls)>0;});
-    var totEf=pagosEf.reduce(function(a,m){return a+nv(m.monto);},0);
-    var totDlls=pagosDlls.reduce(function(a,m){return a+nv(m.montoDlls);},0);
-    var totDllsPesos=pagosDlls.reduce(function(a,m){return a+nv(m.monto);},0);
-    var sEf=efEnt-totEf-totDllsPesos;var sDlls=dllsEnt-totDlls;
-    out+='<div style="margin-bottom:10px;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;">'+
-      '<div style="background:#6B1E2E;color:#fff;padding:8px 12px;font-size:12px;font-weight:700;">Semana '+(si+1)+'</div>'+
-      '<div style="padding:10px 12px;">'+
-        '<div style="font-size:10px;font-weight:700;color:#6B1E2E;margin-bottom:4px;">💵 EFECTIVO</div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;">'+
-          '<span style="color:#888;">Cobrado</span><span style="font-weight:700;color:#6B1E2E;">'+fm(efEnt)+'</span></div>'+
-        pagosEf.map(function(m){return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:.5px solid #f0f0f0;">'+
-          '<span style="color:#666;">'+m.concepto+'</span><span style="color:#8B3A2A;">-'+fm(m.monto)+'</span></div>';}).join('')+
-        pagosDlls.map(function(m){return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:.5px solid #f0f0f0;">'+
-          '<span style="color:#A8843F;">'+m.concepto+' (USD '+nv(m.montoDlls).toFixed(2)+'×'+tc+')</span>'+
-          '<span style="color:#8B3A2A;">-'+fm(m.monto)+'</span></div>';}).join('')+
-        '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-top:4px;padding-top:4px;border-top:1px solid #e0e0e0;">'+
-          '<span>Saldo ef.</span><span style="color:'+(sEf>=0?'#6B1E2E':'#8B3A2A')+';">'+fm(sEf)+'</span></div>'+
-        (dllsEnt>0||totDlls>0?
-          '<div style="margin-top:8px;font-size:10px;font-weight:700;color:#A8843F;margin-bottom:4px;">💲 DÓLARES</div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;">'+
-            '<span style="color:#888;">Cobrado</span><span style="font-weight:700;color:#A8843F;">USD '+dllsEnt.toFixed(2)+'</span></div>'+
-          pagosDlls.map(function(m){return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;">'+
-            '<span style="color:#666;">'+m.concepto+'</span><span style="color:#8B3A2A;">-USD '+nv(m.montoDlls).toFixed(2)+'</span></div>';}).join('')+
-          '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-top:4px;padding-top:4px;border-top:1px solid #e0e0e0;">'+
-            '<span>Saldo USD</span><span style="color:'+(sDlls>=0?'#A8843F':'#8B3A2A')+';">USD '+sDlls.toFixed(2)+'</span></div>'
-        :'')+
-      '</div></div>';
-  });
-  el.innerHTML=out;
-}
 
 // ── COMPROBACIÓN DE GASTOS ──
 var cpSem=null,_cpDel=null;
@@ -2140,6 +2068,8 @@ function renderComprob(){
       '</div>'+
       (Object.keys(porCat).length?'<div style="margin-top:8px;">'+Object.keys(porCat).map(function(c){return '<span class="chip"><span style="width:8px;height:8px;border-radius:50%;background:'+catColor(c)+';"></span>'+esc(c)+' '+fm(porCat[c])+'</span>';}).join('')+'</div>':'')+
       (saldo<0?'<div style="margin-top:8px;font-size:12px;color:#8B3A2A;font-weight:700;">Se gastó más que el fondo entregado.</div>':'')+
+      (saldo>0?(function(){var ya=(state.traspasos||[]).filter(function(t){return t.tipo==='sobrante'&&t.cpSem===cpSem;})[0];
+        return '<button class="btn-ghost" style="margin-top:10px;" onclick="cpSobrante()">'+(ya?'Sobrante en efectivo: '+fm(ya.monto)+' · actualizar a '+fm(saldo):'Pasar sobrante de '+fm(saldo)+' a efectivo')+'</button>';})():'')+
     '</div>'+
     '<div class="rcard">'+
       '<div class="slbl">Agregar ticket</div>'+
@@ -2269,6 +2199,204 @@ function provRenombrar(ci,pi,v){
   saveDebounced();guardarCatalogo();renderCatalogo();
 }
 function provQuitar(ci,pi){var c=catalogo.cats[ci];if(!c)return;c.provs.splice(pi,1);guardarCatalogo();renderCatalogo();}
+
+// ── CAJA: saldos iniciales, traspasos entre cuentas y cierre de mes ──
+var saldosIni={},_salUnsub=null;
+var TR_TIPOS={
+  retiro:{l:'Retiro de banco → efectivo',ic:'🏧'},
+  cambio:{l:'Cambio de dólares → efectivo MN',ic:'💱'},
+  deposito:{l:'Depósito de efectivo → banco',ic:'🏦'},
+  sobrante:{l:'Sobrante de compras → efectivo',ic:'🧾'},
+  entrada:{l:'Otra entrada de efectivo',ic:'➕'},
+  salida:{l:'Otra salida de efectivo',ic:'➖'}
+};
+function mesKeySig(){return curMes===11?('Enero_'+(ANIO+1)):mesKey(curMes+1,ANIO);}
+function saldoIniMes(){var s=saldosIni[mesKey(curMes,ANIO)];return s?{ef:nv(s.ef),dlls:nv(s.dlls),desde:s.desde||'',ts:s.ts||0}:{ef:0,dlls:0,desde:'',ts:0};}
+function cargarSaldos(cb){
+  var done=false;function fin(){if(!done){done=true;if(cb)cb();}}
+  try{
+    if(_salUnsub)_salUnsub();
+    _salUnsub=db.collection('config').doc('saldos_neptuno').onSnapshot(function(snap){
+      if(snap.exists&&snap.data()&&snap.data().data){try{saldosIni=JSON.parse(snap.data().data)||{};}catch(e){}}
+      if(done){try{var p=document.querySelector('.mpanel.active');if(p&&p.id==='p-tesoro'){renderTsrSaldo();renderFlujSemanal();}}catch(e){}}
+      fin();
+    },function(){fin();});
+  }catch(e){fin();}
+  setTimeout(fin,4000);
+}
+function guardarSaldo(key,obj){
+  return db.collection('config').doc('saldos_neptuno').get().then(function(snap){
+    var d={};if(snap.exists&&snap.data()&&snap.data().data){try{d=JSON.parse(snap.data().data)||{};}catch(e){}}
+    d[key]=obj;saldosIni=d;
+    return db.collection('config').doc('saldos_neptuno').set({data:JSON.stringify(d),ts:Date.now()});
+  });
+}
+function trSum(tipo,campo,sem){
+  return(state.traspasos||[]).filter(function(t){return t.tipo===tipo&&(sem===undefined||(t.sem||0)===sem);}).reduce(function(a,t){return a+nv(t[campo||'monto']);},0);
+}
+// Saldos de efectivo, dólares y banco (sem: índice de semana o undefined = mes completo)
+function calcCaja(sem){
+  var sems=getSems(),dias=state.dias||[],t=tesoroMes();
+  var idx=sem===undefined?dias.map(function(_,i){return i;}):(sems[sem]||[]);
+  var sumD=function(k){return idx.reduce(function(a,i){return a+nv(dias[i]?dias[i][k]:0);},0);};
+  var tt=sem===undefined?t:t.filter(function(m){return(m.sem||0)===sem;});
+  var si=saldoIniMes();
+  var r={
+    iniEf:(sem===undefined||sem===0)?si.ef:0, iniD:(sem===undefined||sem===0)?si.dlls:0,
+    cobEf:sumD('efectivo'), cobD:sumD('dlls'), cobB:sumD('tarjeta'),
+    pagEf:tt.filter(function(m){return m.forma==='efectivo'&&!nv(m.montoDlls);}).reduce(function(a,m){return a+nv(m.monto);},0),
+    pagD:tt.filter(function(m){return nv(m.montoDlls)>0;}).reduce(function(a,m){return a+nv(m.montoDlls);},0),
+    pagB:tt.filter(function(m){return m.forma==='banco';}).reduce(function(a,m){return a+nv(m.monto);},0),
+    fondos:sem===undefined?fondosMes():nv(((state.comprob||[])[sem]||{}).fondo),
+    retiro:trSum('retiro','monto',sem), cambioMX:trSum('cambio','monto',sem), cambioUSD:trSum('cambio','montoDlls',sem),
+    deposito:trSum('deposito','monto',sem), sobrante:trSum('sobrante','monto',sem), entrada:trSum('entrada','monto',sem), salida:trSum('salida','monto',sem)
+  };
+  r.entEf=r.retiro+r.cambioMX+r.sobrante+r.entrada;
+  r.salEf=r.deposito+r.salida;
+  r.ef=r.iniEf+r.cobEf+r.entEf-r.pagEf-r.salEf;
+  r.usd=r.iniD+r.cobD-r.pagD-r.cambioUSD;
+  r.banco=r.cobB+r.deposito-r.pagB-r.fondos-r.retiro;
+  return r;
+}
+function renderTsrSaldo(){
+  var el=document.getElementById('tsr-saldo-grid');if(!el)return;
+  var c=calcCaja(),si=saldoIniMes(),tc=nv(state.cfg&&state.cfg.tc)||16.5;
+  var L=function(lbl,v,col,neg){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;"><span style="color:#888;">'+lbl+'</span><span style="font-weight:700;color:'+(col||'#1A1416')+';">'+(neg&&v?'-':'')+v2(v)+'</span></div>';};
+  var v2=function(v){return fm(v);};
+  var LU=function(lbl,v,neg){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;"><span style="color:#888;">'+lbl+'</span><span style="font-weight:700;color:#A8843F;">'+(neg&&v?'-':'')+'USD '+nv(v).toFixed(2)+'</span></div>';};
+  var tot=function(lbl,v,col){return '<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;padding-top:6px;margin-top:4px;border-top:1px solid rgba(0,0,0,.08);"><span>'+lbl+'</span><span style="color:'+col+';font-family:Georgia,serif;">'+v+'</span></div>';};
+  var sig=mesKeySig().replace('_',' ');
+  var esAdm=curUser&&curUser.role!=='cajero';
+  el.innerHTML=
+    '<div style="background:#F6ECEE;border-radius:10px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="font-size:11px;font-weight:700;color:#6B1E2E;margin-bottom:6px;">💵 EFECTIVO MXN</div>'+
+      L('Saldo inicial',c.iniEf)+L('Cobrado en ventas',c.cobEf)+
+      (c.entEf?L('Entradas por traspasos',c.entEf,'#6B1E2E'):'')+
+      L('Pagado',c.pagEf,'#8B3A2A',true)+
+      (c.salEf?L('Salidas por traspasos',c.salEf,'#8B3A2A',true):'')+
+      tot('Disponible',fm(c.ef),c.ef>=0?'#6B1E2E':'#8B3A2A')+
+    '</div>'+
+    '<div style="background:#faf3e0;border-radius:10px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="font-size:11px;font-weight:700;color:#A8843F;margin-bottom:6px;">💲 DÓLARES USD <span style="font-weight:400;color:#aaa;font-size:10px;">TC: $'+tc+'</span></div>'+
+      LU('Saldo inicial',c.iniD)+LU('Cobrado en ventas',c.cobD)+LU('Pagado',c.pagD,true)+
+      (c.cambioUSD?LU('Cambiados a pesos',c.cambioUSD,true):'')+
+      tot('Disponible','USD '+c.usd.toFixed(2),c.usd>=0?'#A8843F':'#8B3A2A')+
+    '</div>'+
+    '<div style="background:#eef3fb;border-radius:10px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="font-size:11px;font-weight:700;color:#185FA5;margin-bottom:6px;">🏦 BANCO / TARJETA</div>'+
+      L('Cobrado',c.cobB,'#185FA5')+(c.deposito?L('Depósitos de efectivo',c.deposito,'#185FA5'):'')+
+      L('Pagos',c.pagB,'#8B3A2A',true)+(c.fondos?L('Fondos de compras',c.fondos,'#8B3A2A',true):'')+
+      (c.retiro?L('Retiros a efectivo',c.retiro,'#8B3A2A',true):'')+
+      tot('Neto del mes',fm(c.banco),c.banco>=0?'#185FA5':'#8B3A2A')+
+    '</div>'+
+    (esAdm?'<div class="rcard" style="margin-bottom:8px;">'+
+      '<div class="slbl">Saldo inicial de '+MESES[curMes]+'</div>'+
+      '<div style="font-size:11px;color:#888;margin-bottom:8px;">'+(si.desde?'Traspasado del cierre de '+si.desde.replace('_',' ')+'. ':'')+'Puedes corregirlo a mano.</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+
+        '<label style="font-size:11px;font-weight:700;color:#666;">Efectivo MXN<input type="number" inputmode="decimal" id="si-ef" value="'+(si.ef||'')+'" placeholder="0" onchange="setSaldoIni()" style="width:100%;margin-top:4px;font-size:14px;padding:7px 8px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1A1416;"></label>'+
+        '<label style="font-size:11px;font-weight:700;color:#666;">Dólares USD<input type="number" inputmode="decimal" id="si-dlls" value="'+(si.dlls||'')+'" placeholder="0" onchange="setSaldoIni()" style="width:100%;margin-top:4px;font-size:14px;padding:7px 8px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1A1416;"></label>'+
+      '</div>'+
+      '<button class="tsr-btn" style="margin-top:10px;background:#1A1416;color:#D9BE8A;" onclick="cerrarMes()">'+(window._cierrePend?'Toca otra vez para confirmar':'Cerrar mes: pasar '+fm(c.ef)+' y USD '+c.usd.toFixed(2)+' a '+sig)+'</button>'+
+      '<div style="font-size:10px;color:#888;margin-top:6px;">Se guarda como saldo inicial de '+sig+'. Si capturas algo después, puedes volver a cerrar y se actualiza.</div>'+
+    '</div>':'');
+}
+function setSaldoIni(){
+  var ef=parseFloat(document.getElementById('si-ef').value)||0,dl=parseFloat(document.getElementById('si-dlls').value)||0;
+  var cur=saldoIniMes();
+  guardarSaldo(mesKey(curMes,ANIO),{ef:ef,dlls:dl,desde:cur.desde,ts:Date.now(),manual:true})
+    .then(function(){showSync('saved','✓ Saldo inicial guardado');setTimeout(function(){showSync('hidden','');},1500);renderTsrSaldo();renderFlujSemanal();})
+    .catch(function(){showSync('error','No se pudo guardar');});
+}
+function cerrarMes(){
+  if(!window._cierrePend){window._cierrePend=true;renderTsrSaldo();setTimeout(function(){window._cierrePend=false;try{renderTsrSaldo();}catch(e){}},4000);return;}
+  window._cierrePend=false;
+  var c=calcCaja(),key=mesKeySig();
+  guardarSaldo(key,{ef:Math.round(c.ef*100)/100,dlls:Math.round(c.usd*100)/100,desde:mesKey(curMes,ANIO),ts:Date.now()})
+    .then(function(){showSync('saved','✓ Saldo pasado a '+key.replace('_',' '));setTimeout(function(){showSync('hidden','');},2500);renderTsrSaldo();})
+    .catch(function(){showSync('error','No se pudo cerrar el mes');});
+}
+// Traspasos
+var _trDel=null;
+function renderTraspasos(){
+  var el=document.getElementById('tsr-traspasos');if(!el)return;
+  var sems=getSems(),dias=state.dias||[],tr=(state.traspasos||[]).slice().sort(function(a,b){return(a.fecha||'').localeCompare(b.fecha||'')||a.id-b.id;});
+  var tc=nv(state.cfg&&state.cfg.tc)||16.5;
+  var semOpts=sems.map(function(s,i){var d1=dias[s[0]]?dias[s[0]].num:'?',d2=dias[s[s.length-1]]?dias[s[s.length-1]].num:'?';return '<option value="'+i+'"'+(i===getSemActual()?' selected':'')+'>Sem '+(i+1)+' ('+d1+'-'+d2+')</option>';}).join('');
+  var hoy=new Date(),hs=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  var _fs=dias.map(function(d){return d.fecha;}).filter(Boolean);if(_fs.length&&(hs<_fs[0]||hs>_fs[_fs.length-1])){var _s=sems[getSemActual()]||[];hs=(dias[_s[0]]&&dias[_s[0]].fecha)||_fs[0];}
+  el.innerHTML='<div class="slbl">Traspasos entre cuentas</div>'+
+    '<div style="font-size:11px;color:#888;margin:-4px 0 8px;">Retiros, cambios de dólares y depósitos. Mueven dinero entre efectivo, dólares y banco; no son gasto ni afectan el resultado.</div>'+
+    '<div class="cp-form">'+
+      '<select id="tr-tipo" class="full" onchange="trTipoChange()">'+Object.keys(TR_TIPOS).map(function(k){return '<option value="'+k+'">'+TR_TIPOS[k].ic+' '+TR_TIPOS[k].l+'</option>';}).join('')+'</select>'+
+      '<input type="date" id="tr-fecha" value="'+hs+'">'+
+      '<select id="tr-sem">'+semOpts+'</select>'+
+      '<input type="number" inputmode="decimal" id="tr-usd" placeholder="Dólares (USD)" oninput="trCalc()" hidden>'+
+      '<input type="number" inputmode="decimal" id="tr-tc" placeholder="Tipo de cambio" value="'+tc+'" oninput="trCalc()" hidden>'+
+      '<input type="number" inputmode="decimal" id="tr-monto" class="full" placeholder="Monto en pesos MXN">'+
+      '<input type="text" id="tr-nota" class="full" placeholder="Nota (opcional): cheque, para nómina…">'+
+      '<button class="tsr-btn full" style="margin-top:0;background:#4A1420;" onclick="trAdd()">+ Registrar traspaso</button>'+
+    '</div><div class="tsr-msg" id="tr-msg"></div>'+
+    (tr.length?'<div style="margin-top:10px;">'+tr.map(function(t){
+      var T=TR_TIPOS[t.tipo]||{l:t.tipo,ic:'•'};var fd=(t.fecha||'').split('-');
+      return '<div class="cp-item"><div style="min-width:0;flex:1;"><div class="cp-prov">'+T.ic+' '+esc(T.l)+'</div>'+
+        '<div class="cp-det">'+(fd.length===3?fd[2]+'/'+fd[1]+' · ':'')+'Sem '+((t.sem||0)+1)+(t.tipo==='cambio'?' · USD '+nv(t.montoDlls).toFixed(2)+' × '+nv(t.tc):'')+(t.nota?' · '+esc(t.nota):'')+'</div></div>'+
+        '<div class="cp-monto" style="color:#4A1420;">'+fm(t.monto)+'</div>'+
+        '<button class="cp-del" onclick="trDel('+t.id+')">'+(_trDel===t.id?'🗑':'×')+'</button></div>';
+    }).join('')+'</div>':'<p style="text-align:center;color:#aaa;padding:.8rem;font-size:12px;">Sin traspasos este mes</p>');
+}
+function trTipoChange(){var c=document.getElementById('tr-tipo').value==='cambio';document.getElementById('tr-usd').hidden=!c;document.getElementById('tr-tc').hidden=!c;document.getElementById('tr-monto').placeholder=c?'Pesos recibidos (MXN)':'Monto en pesos MXN';}
+function trCalc(){var u=parseFloat(document.getElementById('tr-usd').value)||0,t=parseFloat(document.getElementById('tr-tc').value)||0;if(u&&t)document.getElementById('tr-monto').value=Math.round(u*t*100)/100;}
+function trMsg(t,ok){var el=document.getElementById('tr-msg');if(!el)return;el.style.display='block';el.style.background=ok?'#F6ECEE':'#fbeded';el.style.color=ok?'#6B1E2E':'#8B3A2A';el.textContent=t;setTimeout(function(){el.style.display='none';},2500);}
+function trAdd(){
+  var tipo=document.getElementById('tr-tipo').value,monto=parseFloat(document.getElementById('tr-monto').value)||0;
+  var usd=parseFloat(document.getElementById('tr-usd').value)||0,tc=parseFloat(document.getElementById('tr-tc').value)||0;
+  if(tipo==='cambio'&&usd<=0){trMsg('Escribe los dólares cambiados');return;}
+  if(monto<=0&&tipo!=='cambio'){trMsg('Escribe el monto');return;}
+  if(!state.traspasos)state.traspasos=[];
+  state.traspasos.push({id:Date.now(),tipo:tipo,fecha:document.getElementById('tr-fecha').value||'',sem:parseInt(document.getElementById('tr-sem').value)||0,
+    monto:monto,montoDlls:tipo==='cambio'?usd:0,tc:tipo==='cambio'?tc:0,nota:document.getElementById('tr-nota').value.trim()});
+  saveDebounced();renderTraspasos();renderTsrSaldo();renderFlujSemanal();trMsg('✓ Traspaso registrado',true);
+}
+function trDel(id){
+  if(_trDel!==id){_trDel=id;renderTraspasos();setTimeout(function(){if(_trDel===id){_trDel=null;try{renderTraspasos();}catch(e){}}},3000);return;}
+  _trDel=null;state.traspasos=(state.traspasos||[]).filter(function(t){return t.id!==id;});
+  saveDebounced();renderTraspasos();renderTsrSaldo();renderFlujSemanal();
+}
+function cpSobrante(){
+  var ws=cpSemana(),w=ws[cpSem];var g=w.items.reduce(function(a,it){return a+nv(it.monto);},0),s=Math.round((nv(w.fondo)-g)*100)/100;
+  if(s<=0)return;
+  if(!state.traspasos)state.traspasos=[];
+  var ya=state.traspasos.filter(function(t){return t.tipo==='sobrante'&&t.cpSem===cpSem;})[0];
+  if(ya){ya.monto=s;}else state.traspasos.push({id:Date.now(),tipo:'sobrante',fecha:'',sem:cpSem,cpSem:cpSem,monto:s,montoDlls:0,tc:0,nota:'Sobrante comprobación semana '+(cpSem+1)});
+  saveDebounced();renderComprob();cpMsg('✓ Sobrante de '+fm(s)+' pasado a efectivo',true);
+}
+// Flujo por semana con saldo acumulado
+function renderFlujSemanal(){
+  var el=document.getElementById('tsr-flujo-sem');if(!el)return;
+  var sems=getSems();if(!sems.length){el.innerHTML='';return;}
+  var tr=state.traspasos||[],t=tesoroMes();
+  var acEf=0,acD=0;
+  var out='<div style="font-size:13px;font-weight:800;margin-bottom:10px;color:#444;">📊 Flujo de efectivo por semana</div>';
+  sems.forEach(function(sem,si){
+    var c=calcCaja(si);
+    var semEf=c.ef,semD=c.usd;acEf+=semEf;acD+=semD;
+    var pagos=t.filter(function(m){return(m.sem||0)===si&&m.forma==='efectivo';});
+    var trs=tr.filter(function(x){return(x.sem||0)===si;});
+    var row=function(l,v,col){return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:.5px solid #f0f0f0;"><span style="color:#666;">'+l+'</span><span style="color:'+col+';">'+v+'</span></div>';};
+    out+='<div style="margin-bottom:10px;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;">'+
+      '<div style="background:#6B1E2E;color:#fff;padding:8px 12px;font-size:12px;font-weight:700;display:flex;justify-content:space-between;"><span>Semana '+(si+1)+'</span><span style="font-weight:400;opacity:.85;">acumulado '+fm(acEf)+'</span></div>'+
+      '<div style="padding:10px 12px;">'+
+        (c.iniEf?row('Saldo inicial',fm(c.iniEf),'#6B1E2E'):'')+
+        row('<b>Cobrado efectivo</b>','<b>'+fm(c.cobEf)+'</b>','#6B1E2E')+
+        trs.map(function(x){var T=TR_TIPOS[x.tipo]||{l:x.tipo};var sal=(x.tipo==='deposito'||x.tipo==='salida');
+          return row((T.ic||'')+' '+esc(T.l)+(x.nota?' · '+esc(x.nota):''),(sal?'-':'+')+fm(x.monto),sal?'#8B3A2A':'#4A1420');}).join('')+
+        pagos.map(function(m){return row(esc(m.concepto||m.prov||''),'-'+fm(m.monto),'#8B3A2A');}).join('')+
+        '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-top:4px;padding-top:4px;border-top:1px solid #e0e0e0;"><span>Saldo de la semana</span><span style="color:'+(semEf>=0?'#6B1E2E':'#8B3A2A')+';">'+fm(semEf)+'</span></div>'+
+        ((c.cobD||c.pagD||c.cambioUSD||c.iniD)?'<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px;color:#A8843F;"><span>Dólares: cobrado '+c.cobD.toFixed(2)+(c.cambioUSD?' · cambiado '+c.cambioUSD.toFixed(2):'')+'</span><span style="font-weight:700;">USD '+semD.toFixed(2)+'</span></div>':'')+
+      '</div></div>';
+  });
+  el.innerHTML=out;
+}
 
 // ── CONFIGURACIÓN DE SEMANAS ──
 var configSems={};
