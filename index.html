@@ -245,6 +245,29 @@ body.modo-oscuro [style*="background:#faf3e0"]{background:#2a1f00!important;}
 body.modo-oscuro [style*="background:#eef3fb"]{background:#0a1a2e!important;}
 
 /* ── NEPTUNO ── */
+/* iPhone: respetar la zona de la hora/notch y la barra inferior */
+.topbar{height:auto;min-height:52px;padding-top:env(safe-area-inset-top,0px);padding-left:max(10px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px));box-sizing:border-box;}
+.tbl,.tbr{min-height:52px;}
+.tbl{min-width:0;flex:1 1 auto;}
+.tbr{flex:0 0 auto;gap:6px;}
+.ham,.logout-btn,.modo-btn{min-width:40px;min-height:40px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.ham{font-size:22px;padding:0 8px;}
+.L{padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(20px,env(safe-area-inset-bottom,0px));}
+.sb-head{padding-top:calc(20px + env(safe-area-inset-top,0px));}
+.sb-foot{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));}
+.mpanel{padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));}
+.syncbar{bottom:calc(16px + env(safe-area-inset-bottom,0px));}
+.tbl .app-title{min-width:0;overflow:hidden;white-space:nowrap;}
+@media(max-width:350px){#usr-av{display:none;}.topbar .app-title{letter-spacing:.08em;}}
+@media(max-width:430px){
+  .usr-nom{display:none;}
+  .topbar .app-title{letter-spacing:.14em;font-size:14px;}
+  .export-btn{padding:5px 8px;}
+  .ro-badge{display:none!important;}
+  .ex-txt{display:none;}
+  .export-btn{min-height:40px;min-width:40px;align-items:center;justify-content:center;}
+}
+
 /* socio: solo lectura */
 body.ro .tsr-form,body.ro .cp-form,body.ro .gcadd,body.ro .mov-del,body.ro .cp-del,body.ro .pv-del,
 body.ro .tsr-btn,body.ro .btn-sm,body.ro .btn-ghost,body.ro .export-btn,body.ro #tr-msg,body.ro #cp-msg,
@@ -337,7 +360,7 @@ body.modo-oscuro .sb-head .sb-suc{color:var(--nep-gold-l)!important;}
       <span class="suc-badge" id="suc-badge"></span>
     </div>
     <div class="tbr">
-      <button class="export-btn" id="btn-export" onclick="exportarExcel()">⬇ Excel</button>
+      <button class="export-btn" id="btn-export" onclick="exportarExcel()" title="Descargar Excel">⬇<span class="ex-txt">&nbsp;Excel</span></button>
       <button class="modo-btn" id="modo-btn" onclick="toggleModo()">🌙</button>
       <span class="usr-nom" id="usr-nom"></span>
       <div class="uav" id="usr-av">?</div>
@@ -697,7 +720,7 @@ function setupUI(){
   document.getElementById('TOPS').style.display=can?'grid':'none';
   // Excel btn
   var exBtn=document.getElementById('btn-export');
-  if(exBtn)exBtn.style.display=curUser.role==='propietario'?'':'none';
+  if(exBtn)exBtn.style.display=curUser.role==='propietario'?'inline-flex':'none';
   // Sidebar
   sbInit();
 }
